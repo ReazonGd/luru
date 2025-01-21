@@ -1,0 +1,15 @@
+[package]
+name = "luru"
+description = "A file explorer in your terminal!"
+version = "0.1"
+edition = "2021"
+
+[dependencies]
+crossterm = "0.28.1"
+chrono = "0.4"
+ctrlc = "3.4" 
+
+[[bin]]
+name = "luru"
+path = "src/main.rs"
+

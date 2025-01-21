@@ -63,7 +63,7 @@ impl App {
             current_path: path.clone(),
             temp_path: PathBuf::from("/"),
             app_ui: UI::new(),
-            app_term: Termin::new(path.clone()),
+            app_term: Termin::new(),
             app_mode: AppMode::Normal,
             decs_label,
             command: String::new(),
@@ -351,10 +351,6 @@ impl App {
                 }
             }
             KeyCode::Tab => {
-                // if !self.command.ends_with(' ') && self.command.len() > 1 {
-                //     self.command.push(' ');
-                // }
-
                 if self.sugest.len() > 0 {
                     self.command
                         .insert_str(self.x_cursor as usize, &self.sugest);
