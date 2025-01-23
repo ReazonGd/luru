@@ -1,5 +1,7 @@
 # LURU-EXPLORER
 
+![demo](aset/demo.png)
+
 File Explorer in your terminal. A terminal tool to help finding a your folder directories. 
 
 > [!NOTE]
