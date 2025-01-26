@@ -1,6 +1,6 @@
 extern crate chrono;
 
-use chrono::{DateTime, Local};
+// use chrono::{DateTime, Local};
 use std::{fs, io, path::PathBuf, time::SystemTime};
 
 use super::pathmanager::{convert_path_to_nav, NavigationCommand};
@@ -35,30 +35,33 @@ pub fn read_dir(path: &PathBuf) -> io::Result<Vec<ReadDirItems>> {
 
                 let mut name = String::new();
 
-                let metadata = path.metadata()?;
+                // let metadata = path.metadata()?;
 
-                if let Ok(time) = metadata.modified() {
-                    let date_time: DateTime<Local> = time.into();
-                    name.push_str(format!("{}  ", date_time.format("%d-%m-%Y")).as_str());
-                } else {
-                    name.push_str("-  ");
-                }
+                // if let Ok(time) = metadata.modified() {
+                //     let date_time: DateTime<Local> = time.into();
+                //     name.push_str(format!("{}  ", date_time.format("%d-%m-%Y")).as_str());
+                // } else {
+                //     name.push_str("-  ");
+                // }
+
+                let file_name = path.file_name().unwrap();
+                let file_name = file_name.to_str().unwrap();
 
                 if path.is_dir() {
-                    name.push_str("dir  /");
+                    name.push_str("🖿 ");
                     // name.push('/');
                 } else {
-                    name.push_str("file  ");
+                    name.push_str("📑 ");
                 }
 
-                name.push_str(path.file_name().and_then(|s| s.to_str()).unwrap());
+                name.push_str(&file_name);
                 // name.push_str(" ".repeat().as_str());
 
                 res.push(ReadDirItems {
-                    navigation_type: convert_path_to_nav(path.clone().to_str().unwrap()).unwrap(),
+                    navigation_type: convert_path_to_nav(path.clone().to_str().unwrap())?,
                     path: path.clone(),
                     label: name.clone(),
-                    file_name: path.file_name().unwrap().to_str().unwrap().to_string(),
+                    file_name: file_name.to_string(),
                 });
             }
         }

@@ -5,9 +5,10 @@ use std::{
 
 #[derive(Debug)]
 pub enum NavigationCommand {
-    Up(usize),         // Naik ke direktori induk sebanyak n level
-    Root,              // Kembali ke root direktori
-    Home,              // Kembali ke home direktori
+    Up(usize), // Naik ke direktori induk sebanyak n level
+    Root,      // Kembali ke root direktori
+    Home,      // Kembali ke home direktori
+    WorkingDirectory,
     Absolute(PathBuf), // Path absolut
     Relative(PathBuf), // Path relatif
 }
@@ -19,6 +20,7 @@ pub fn convert_path_to_nav(path: &str) -> io::Result<NavigationCommand> {
             Ok(NavigationCommand::Up(levels))
         }
 
+        "." => Ok(NavigationCommand::WorkingDirectory),
         "/" => Ok(NavigationCommand::Root),
         "~" | "$HOME" => Ok(NavigationCommand::Home),
 
@@ -58,6 +60,8 @@ pub fn resolve_path(current_dir: &Path, command: &NavigationCommand) -> io::Resu
             }
             Ok(target)
         }
+
+        NavigationCommand::WorkingDirectory => Ok(env::current_dir().unwrap_or(PathBuf::from("/"))),
 
         NavigationCommand::Root => Ok(PathBuf::from("/")),
 

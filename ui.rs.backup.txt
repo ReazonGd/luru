@@ -1,0 +1,131 @@
+use std::{
+    io::{self, Write},
+    path::PathBuf,
+};
+
+use crossterm::{
+    cursor, execute,
+    style::{self, Color, ResetColor, SetBackgroundColor, SetForegroundColor},
+    terminal::{self, ClearType},
+};
+
+pub struct UI {
+    pub stdout: io::Stdout,
+    pub window_size: (u16, u16),
+    content_view: ContentView,
+    path_label: PathBuf,
+    desc_label: String,
+}
+
+struct ContentView {
+    cursor: usize,
+    render_start: usize,
+    max_render_items: u16,
+}
+
+impl UI {
+    pub fn new() -> io::Result<Self> {
+        Ok(UI {
+            stdout: io::stdout(),
+            window_size: terminal::size()?,
+            content_view: ContentView {
+                cursor: 0,
+                render_start: 0,
+                max_render_items: 0,
+            },
+            path_label: PathBuf::new(),
+            desc_label: String::new(),
+        })
+    }
+
+    pub fn print(&mut self, content: &String) {
+        execute!(self.stdout, style::Print(&content)).unwrap();
+    }
+    pub fn begin(&mut self) -> io::Result<()> {
+        terminal::enable_raw_mode()?;
+        self.window_size = terminal::size()?;
+
+        self.content_view.max_render_items = self.window_size.1.saturating_sub(4);
+
+        if self.content_view.max_render_items < 5 {
+            terminal::disable_raw_mode()?;
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Terminal size too small",
+            ));
+        }
+
+        self.clear_screen()?;
+        Ok(())
+    }
+
+    pub fn end(&mut self) -> io::Result<()> {
+        self.clear_screen()?;
+        self.move_cursor(0, 0)?;
+        terminal::disable_raw_mode()?;
+        self.stdout.flush()?;
+        Ok(())
+    }
+
+    pub fn clear_screen(&mut self) -> io::Result<()> {
+        execute!(self.stdout, ResetColor, terminal::Clear(ClearType::All))?;
+        Ok(())
+    }
+
+    pub fn move_cursor(&mut self, x: u16, y: u16) -> io::Result<()> {
+        execute!(self.stdout, cursor::MoveTo(x, y))?;
+        Ok(())
+    }
+
+    pub fn set_frame_content(&mut self, path: PathBuf, description: String) -> io::Result<()> {
+        self.path_label = path;
+        self.desc_label = description;
+        self.render_frame()?;
+        Ok(())
+    }
+
+    pub fn render_frame(&mut self) -> io::Result<()> {
+        self.clear_screen()?;
+        self.move_cursor(0, 0)?;
+
+        let path_color = if self.path_label.exists() {
+            Color::DarkGreen
+        } else {
+            Color::DarkRed
+        };
+
+        let path_str = self.path_label.to_string_lossy();
+        let trimmed_path = self.trim_to_window_width(&path_str);
+
+        execute!(
+            self.stdout,
+            SetForegroundColor(Color::Black),
+            SetBackgroundColor(path_color),
+            style::Print(trimmed_path),
+            style::ResetColor,
+        )?;
+
+        self.move_cursor(0, self.window_size.1.saturating_sub(2))?;
+        execute!(self.stdout, style::Print(&self.desc_label))?;
+
+        self.move_cursor(0, self.window_size.1.saturating_sub(1))?;
+        execute!(
+            self.stdout,
+            SetForegroundColor(Color::DarkMagenta),
+            style::Print("$ "),
+            style::ResetColor,
+        )?;
+
+        self.stdout.flush()?;
+        Ok(())
+    }
+
+    fn trim_to_window_width(&self, s: &str) -> String {
+        let max_width = self.window_size.0 as usize;
+        if s.len() <= max_width {
+            s.to_string()
+        } else {
+            s[s.len() - max_width..].to_string()
+        }
+    }
+}
