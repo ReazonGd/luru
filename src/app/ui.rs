@@ -7,7 +7,7 @@ use crossterm::{
     cursor,
     execute,
     // queue,
-    style::{self, ResetColor, SetBackgroundColor, SetForegroundColor},
+    style::{self, ResetColor, SetForegroundColor},
     terminal,
 };
 
@@ -52,8 +52,9 @@ impl UI {
         }
     }
     pub fn begin(&mut self) -> io::Result<()> {
-        let _ = terminal::enable_raw_mode()?;
+        // terminal::enable_raw_mode()?;
         self.raw_mode(true)?;
+        execute!(self.stdout, terminal::EnterAlternateScreen)?;
         self.window_size = terminal::size()?;
         self.safe_height = (2, self.window_size.1 - 3);
         self.content_cursor = 0;
@@ -82,8 +83,9 @@ impl UI {
 
     pub fn end(&mut self) -> io::Result<()> {
         self.clear_screen()?;
-        self.move_cursor(0, 0)?;
+        // self.move_cursor(0, 0)?;
         terminal::disable_raw_mode()?;
+        execute!(self.stdout, terminal::LeaveAlternateScreen)?;
         self.raw_mode(false)?;
         self.stdout.flush()?;
 
@@ -150,26 +152,13 @@ impl UI {
         if s.len() <= max_width {
             s.to_string()
         } else {
-            s[s.len() - max_width..].to_string()
+            s[(s.len() + 3) - max_width..].to_string()
         }
     }
 
     pub fn render_frame(&mut self) -> io::Result<()> {
         // self.clear_screen()?;
         self.move_cursor(0, 0)?;
-
-        // let mut path_label_coolor = style::Color::DarkGreen;
-        // if !self.path_label.exists() {
-        //     path_label_coolor = style::Color::DarkRed;
-        // }
-
-        //
-        // let path_display = self.path_label.to_str().unwrap();
-        // let mut display_from = 0;
-
-        // if path_display.len() > self.window_size.0 as usize {
-        //     display_from = get_char_len(&path_display) - (self.window_size.0 as usize)
-        // }
 
         let path_color = if self.path_label.exists() {
             style::Color::DarkGreen
@@ -182,8 +171,8 @@ impl UI {
 
         execute!(
             self.stdout,
-            SetForegroundColor(style::Color::Black),
-            SetBackgroundColor(path_color),
+            SetForegroundColor(path_color),
+            style::Print("\x1b[4m🖿 "),
             style::Print(trimmed_path),
             style::ResetColor,
         )?;

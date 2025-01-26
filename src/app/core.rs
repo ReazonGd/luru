@@ -42,8 +42,8 @@ impl App {
     pub fn new(start_location: &PathBuf) -> io::Result<App> {
         let mut decs_label = format!("\x1b[1m\x1b[035m{}\x1b[0m exit \x1b[1m\x1b[035m{}\x1b[0m terminal only \x1b[1m\x1b[035m{}\x1b[0m command historys", "^c", "^t", "^h");
         let mut path = start_location.clone();
-        let mut config = Config::new();
-        config.load();
+        let mut config = Config::new()?;
+        config.load()?;
 
         if path.eq(&PathBuf::new()) {
             // path = env::current_dir().unwrap();
@@ -70,7 +70,7 @@ impl App {
             decs_label,
             command: String::new(),
             content: Vec::<ReadDirItems>::new(),
-            command_history: Vec::<String>::new(),
+            command_history: config.command_history.clone(),
             content_to_read: Vec::<String>::new(),
             config,
             x_cursor: 0,
@@ -168,18 +168,31 @@ impl App {
 
             if self.re_read {
                 let is_cd: bool = !self.current_path.eq(&self.temp_path);
-                self.do_a_scan()?;
 
-                if is_cd {
-                    if self.content.len() > 2 {
-                        self.app_ui.content_cursor = 1;
-                    } else {
+                match self.app_mode {
+                    AppMode::Normal => {
+                        self.do_a_scan()?;
+                        if is_cd {
+                            if self.content.len() > 2 {
+                                self.app_ui.content_cursor = 1;
+                            } else {
+                                self.app_ui.content_cursor = 0;
+                            }
+                            self.app_ui.content_render_from = 0;
+                        } else {
+                            // self.app_ui.content_cursor = 0;
+                            // self.app_ui.content_render_from = 0;
+                        }
+
+                        self.content_to_read =
+                            self.content.iter().map(|f| f.label.clone()).collect();
+                    }
+                    AppMode::CommandHistory => {
+                        self.content_to_read = self.command_history.clone();
+                        self.app_ui.content_render_from = 0;
                         self.app_ui.content_cursor = 0;
                     }
-                    self.app_ui.content_render_from = 0;
-                } else {
-                    // self.app_ui.content_cursor = 0;
-                    // self.app_ui.content_render_from = 0;
+                    _ => {}
                 }
 
                 self.app_ui.clear_screen()?;
@@ -199,7 +212,10 @@ impl App {
     }
 
     fn find_sugest(&mut self) -> io::Result<()> {
-        // mencari kata yang ada posisi x
+        if (self.x_cursor as usize) < self.command.len() {
+            return Ok(());
+        }
+
         let words = self.command.split(" ");
         let mut word: String = String::new();
         let mut pos_x2 = self.x_cursor as isize;
@@ -207,7 +223,7 @@ impl App {
         for (_, w) in words.enumerate() {
             pos_x2 -= w.len() as isize + 1;
 
-            if pos_x2 <= 0 {
+            if pos_x2 < 0 {
                 word = w.to_string();
                 break;
             }
@@ -219,24 +235,42 @@ impl App {
             word = word.get(1..).unwrap_or("").to_string();
         }
 
-        let mut filename_selected = String::new();
+        let mut sugested_word = String::new();
         for i in self.content.iter() {
             if i.file_name.starts_with(&word) && !i.file_name.eq(&word) {
-                filename_selected = i.file_name.clone();
+                sugested_word = i.file_name.clone();
                 break;
             }
         }
 
-        let s = word.len();
-        let n = filename_selected.len();
-        if s >= 1 && n >= 1 {
-            self.sugest = filename_selected.get(s..n).unwrap_or("").to_string();
+        // find from cmd history
+        let mut is_cmd = false;
+        if sugested_word.is_empty() {
+            for i in self.command_history.iter() {
+                if i.starts_with(&self.command) && !i.eq(&self.command) {
+                    sugested_word = i.clone();
+                    is_cmd = true;
+                    break;
+                }
+            }
         }
 
-        let mut test = word.clone();
+        let mut test = if is_cmd {
+            self.command.clone()
+        } else {
+            word.clone()
+        };
+
+        let s = test.len();
+        let n = sugested_word.len();
+
+        if s >= 1 && n >= 1 {
+            self.sugest = sugested_word.get(s..n).unwrap_or("").to_string();
+        }
+
         test.push_str(&self.sugest.as_str());
 
-        if !test.eq(&filename_selected) {
+        if !test.eq(&sugested_word) {
             self.sugest = String::new();
         }
 
@@ -253,31 +287,48 @@ impl App {
 
     fn display_ui(&mut self) -> io::Result<()> {
         // self.decs_label = format!("type 'exit' to exit");
-        match self.app_mode {
-            AppMode::Normal => {
-                self.app_ui
-                    .set_frame_content(self.current_path.clone(), self.decs_label.clone())?;
 
-                self.app_ui.render_content(&self.content_to_read)?;
+        self.app_ui
+            .set_frame_content(self.current_path.clone(), self.decs_label.clone())?;
 
-                // self.move_cursor(0, self.window_size.1.wrapping_sub(1));
-                self.app_ui.move_cursor(2, self.app_ui.window_size.1)?;
-                // self.app_ui.print(content);
-                self.app_ui.print(&self.command)?;
+        self.app_ui.render_content(&self.content_to_read)?;
 
-                self.find_sugest()?;
-                self.app_ui
-                    .move_cursor(self.x_cursor + 2, self.app_ui.window_size.1)?;
-            }
-            _ => {}
-        }
+        // self.move_cursor(0, self.window_size.1.wrapping_sub(1));
+        self.app_ui.move_cursor(2, self.app_ui.window_size.1)?;
+        // self.app_ui.print(content);
+        self.app_ui.print(&format!(
+            "{}\x1b[2m{}\x1b[0m",
+            &self.command,
+            String::from("/")
+                .repeat(self.app_ui.window_size.0 as usize - (self.command.len() + 3))
+                .as_str()
+        ))?;
 
+        self.find_sugest()?;
+        self.app_ui
+            .move_cursor(self.x_cursor + 2, self.app_ui.window_size.1)?;
         Ok(())
     }
 
+    /* push to cmd history and check duplicate. if duplicate, move to top */
+    fn push_cmd_to_history(&mut self) {
+        if self.command.trim().is_empty() {
+            return;
+        }
+
+        let cmd = self.command.trim().to_string();
+        if self.command_history.contains(&cmd) {
+            self.command_history.retain(|x| x != &cmd);
+        }
+        self.command_history.insert(0, cmd);
+    }
+
     fn termin_run(&mut self) -> io::Result<()> {
-        self.app_ui.end()?;
-        print!("Attention: This not terminal. first word wil be command and other will be args. (&& and other keys is not implemented yet)");
+        self.app_ui.clear_screen()?;
+        self.app_ui.move_cursor(0, 0)?;
+        self.app_ui.raw_mode(false)?;
+        // self.app_ui.end()?;
+        print!("Any command will run with \x1b[1m\x1b[093m\"sh -c [cmd]\"\x1b[0m you can type \x1b[1m\x1b[035mluru\x1b[0m or \x1b[1m\x1b[035mexit\x1b[0m to back");
         while self.app_mode == AppMode::TerminalOnly {
             self.app_ui
                 .print_term_start(&format!("{}", self.current_path.display()))?;
@@ -285,7 +336,8 @@ impl App {
 
             self.command_handler()?;
         }
-        self.app_ui.begin()?;
+        self.app_ui.raw_mode(true)?;
+        // self.app_ui.begin()?;
         self.current_path = env::current_dir()?;
         self.re_read = true;
         Ok(())
@@ -315,12 +367,17 @@ impl App {
                         't' => self.app_mode = AppMode::TerminalOnly,
                         _ => {}
                     }
-                    self.app_ui.clear_screen()?;
+                    self.re_read = true;
+                    // self.app_ui.clear_screen()?;
                 } else {
                     // self.command.push(ch);
                     self.command.insert(self.x_cursor as usize, ch);
                     self.x_cursor += 1;
                 }
+            }
+            KeyCode::Esc => {
+                self.app_mode = AppMode::Normal;
+                self.re_read = true;
             }
             KeyCode::Up => {
                 if self.app_ui.content_cursor > 0 {
@@ -346,7 +403,7 @@ impl App {
             }
 
             KeyCode::Down => {
-                let max_cursor = self.content.len() - 1;
+                let max_cursor = self.content_to_read.len() - 1;
                 if self.app_ui.content_cursor < max_cursor {
                     if key_event.modifiers.contains(KeyModifiers::SHIFT) {
                         self.app_ui.content_cursor = (self.app_ui.content_cursor as usize)
@@ -366,21 +423,28 @@ impl App {
                 }
             }
             KeyCode::Tab => {
-                if self.sugest.len() > 0 {
-                    self.command
-                        .insert_str(self.x_cursor as usize, &self.sugest);
-                    self.x_cursor += self.sugest.len() as u16;
+                if self.app_mode == AppMode::CommandHistory {
+                    let selected_cmd = &self.command_history[self.app_ui.content_cursor];
+                    self.command = selected_cmd.clone();
                 } else {
-                    let path_selected = &self.content[self.app_ui.content_cursor];
-                    let mut ns = String::new();
+                    if self.sugest.len() > 0 {
+                        self.command
+                            .insert_str(self.x_cursor as usize, &self.sugest);
+                        self.x_cursor += self.sugest.len() as u16;
+                    } else {
+                        let path_selected = &self.content[self.app_ui.content_cursor];
+                        let mut ns = String::new();
 
-                    if !path_selected.file_name.eq("../") {
-                        ns.push_str("./");
+                        if !path_selected.file_name.eq("../") {
+                            ns.push_str("./");
+                        }
+
+                        ns.push_str(&path_selected.file_name);
+                        ns = ns.replace(" ", "\\ ");
+
+                        self.command.push_str(&ns.as_str());
+                        self.x_cursor += ns.len() as u16;
                     }
-                    ns.push_str(&path_selected.file_name);
-
-                    self.command.push_str(&ns.as_str());
-                    self.x_cursor += ns.len() as u16;
                 }
             }
 
@@ -388,7 +452,8 @@ impl App {
                 if key_event.modifiers.contains(KeyModifiers::SHIFT) {
                     self.open_dir()?;
                 } else {
-                    self.command_history.push(self.command.clone());
+                    // self.command_history.push(self.command.clone());
+                    self.push_cmd_to_history();
 
                     self.command_handler()?;
                     self.x_cursor = 0;
@@ -397,6 +462,10 @@ impl App {
             _ => {}
         }
 
+        // if self.app_mode == AppMode::CommandHistory && self.command.is_empty() {
+
+        // }
+
         Ok(())
     }
 
@@ -404,8 +473,11 @@ impl App {
         //
         match self.command.trim() {
             "exit" | "quit" | ":q" => {
-                self.app_mode = AppMode::Normal;
-                self.quit = true;
+                if self.app_mode == AppMode::Normal {
+                    self.quit = true;
+                } else {
+                    self.app_mode = AppMode::Normal;
+                }
             }
 
             "back" | ":b" => {
@@ -457,7 +529,10 @@ impl App {
                 if self.app_mode == AppMode::TerminalOnly {
                     self.app_term.run(self.command.clone())?;
                 } else {
-                    self.app_ui.end()?;
+                    // self.app_ui.end()?;
+                    self.app_ui.clear_screen()?;
+                    self.app_ui.move_cursor(0, 0)?;
+                    self.app_ui.raw_mode(false)?;
                     self.app_ui.print_term_start(
                         &format!("{}", self.current_path.display()),
                         // &self.command,
@@ -467,7 +542,8 @@ impl App {
                     self.app_ui.print_term_end()?;
                     let mut d = String::new();
                     io::stdin().read_line(&mut d)?;
-                    self.app_ui.begin()?;
+                    // self.app_ui.begin()?;
+                    self.app_ui.raw_mode(true)?;
                     self.current_path = env::current_dir()?;
 
                     // self.current_path = self.app_term.running_path.clone();
@@ -484,7 +560,8 @@ impl App {
     pub fn end(&mut self) -> io::Result<()> {
         self.app_ui.end()?;
         self.config.set_working_path(&self.current_path);
-        self.config.save();
+        self.config.command_history = self.command_history.clone();
+        self.config.save()?;
         println!(
             "JOURNAL:\n\nlast path :\n{}",
             self.current_path.display(),
