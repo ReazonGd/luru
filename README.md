@@ -1,16 +1,17 @@
 # LURU-EXPLORER
 
-![demo](aset/demo.png)
+![demo](aset/demo.gif)
 
-File Explorer in your terminal. A terminal tool to help finding a your folder directories. 
+File Explorer and terminal at same time. A terminal tool to help finding a your folder directories, and run some commands at same time.
 
 > [!NOTE]
 > This project is my first project that write in rust.
-> im using linux ubuntu for developing proses. so, it might dosent work is other os like ``windows``.   
+> this project is not support for``windows``.   
+
 
 # Instalations
 
-theres still no proper instalation for this. just run with cargo for now.
+To install luru, you can build and install manualy with ``make install``
 
 
  
