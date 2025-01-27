@@ -14,6 +14,7 @@ enum AppMode {
     Normal,
     CommandHistory,
     TerminalOnly,
+    Bookmark,
 }
 
 pub struct App {
@@ -156,10 +157,7 @@ impl App {
     pub fn run(&mut self) -> io::Result<()> {
         self.app_ui.begin()?;
 
-        ctrlc::set_handler(move || {
-            print!("^C");
-        })
-        .expect("error setting ctrl+c handler");
+        ctrlc::set_handler(move || {}).expect("error setting ctrl+c handler");
 
         while !self.quit {
             if self.app_mode == AppMode::TerminalOnly {
@@ -180,15 +178,24 @@ impl App {
                             }
                             self.app_ui.content_render_from = 0;
                         } else {
-                            // self.app_ui.content_cursor = 0;
-                            // self.app_ui.content_render_from = 0;
                         }
 
                         self.content_to_read =
                             self.content.iter().map(|f| f.label.clone()).collect();
+
+                        // let path_label = self.current_path.to_string_lossy().into_owned();
+                        // if self.config.bookmark.contains(&path_label) {
+                        //     self.app_ui.move_cursor(0, 0)?;
+                        //     self.app_ui.print(&format!("\x1b[035m🗀\x1b[0m"))?;
+                        // }
                     }
                     AppMode::CommandHistory => {
                         self.content_to_read = self.command_history.clone();
+                        self.app_ui.content_render_from = 0;
+                        self.app_ui.content_cursor = 0;
+                    }
+                    AppMode::Bookmark => {
+                        self.content_to_read = self.config.bookmark.clone();
                         self.app_ui.content_render_from = 0;
                         self.app_ui.content_cursor = 0;
                     }
@@ -297,18 +304,34 @@ impl App {
 
         // self.move_cursor(0, self.window_size.1.wrapping_sub(1));
         self.app_ui.move_cursor(2, self.app_ui.window_size.1)?;
-        // self.app_ui.print(content);
+
+        let cmd_len: u16 = self.command.len().try_into().unwrap_or(0);
+        let cursorx2: u16 = (self.x_cursor)
+            .saturating_sub(cmd_len.saturating_sub(self.app_ui.window_size.0 - 3))
+            + 2;
+
+        let mut command_label = self.command.clone();
+        command_label = self
+            .app_ui
+            .trim_str_to(
+                &command_label.as_str(),
+                self.app_ui.window_size.0.saturating_sub(3) as usize,
+            )
+            .to_string();
+
         self.app_ui.print(&format!(
             "{}\x1b[33m\x1b[2m{}\x1b[0m",
-            &self.command,
+            &command_label,
             String::from("/")
-                .repeat(self.app_ui.window_size.0 as usize - (self.command.len() + 3))
+                .repeat(
+                    (self.app_ui.window_size.0 as usize).saturating_sub(command_label.len() + 3)
+                )
                 .as_str()
         ))?;
 
         self.find_sugest()?;
         self.app_ui
-            .move_cursor(self.x_cursor + 2, self.app_ui.window_size.1)?;
+            .move_cursor(cursorx2, self.app_ui.window_size.1)?;
         Ok(())
     }
 
@@ -326,10 +349,9 @@ impl App {
     }
 
     fn termin_run(&mut self) -> io::Result<()> {
-        self.app_ui.clear_screen()?;
         self.app_ui.set_alternate_screen(false)?;
-        // self.app_ui.end()?;
-        print!("\n[LURU]\nAny command will run with \x1b[1m\x1b[093m\"sh -c [cmd]\"\x1b[0m you can type \x1b[1m\x1b[035mluru\x1b[0m or \x1b[1m\x1b[035mexit\x1b[0m to back");
+        // self.clear_exec()?;
+        print!("[LURU TERMINAL]\nAny command will run with \x1b[1m\x1b[093m\"sh -c [cmd]\"\x1b[0m you can type \x1b[1m\x1b[035mluru\x1b[0m or \x1b[1m\x1b[035mexit\x1b[0m to back");
         while self.app_mode == AppMode::TerminalOnly {
             self.app_ui
                 .print_term_start(&format!("{}", self.current_path.display()))?;
@@ -365,6 +387,7 @@ impl App {
                         'h' => self.app_mode = AppMode::CommandHistory,
                         'f' => self.app_mode = AppMode::Normal,
                         't' => self.app_mode = AppMode::TerminalOnly,
+                        'b' => self.app_mode = AppMode::Bookmark,
                         _ => {}
                     }
                     self.re_read = true;
@@ -403,7 +426,7 @@ impl App {
             }
 
             KeyCode::Down => {
-                let max_cursor = self.content_to_read.len() - 1;
+                let max_cursor = self.content_to_read.len().saturating_sub(1);
                 if self.app_ui.content_cursor < max_cursor {
                     if key_event.modifiers.contains(KeyModifiers::SHIFT) {
                         self.app_ui.content_cursor = (self.app_ui.content_cursor as usize)
@@ -423,8 +446,8 @@ impl App {
                 }
             }
             KeyCode::Tab => {
-                if self.app_mode == AppMode::CommandHistory {
-                    let selected_cmd = &self.command_history[self.app_ui.content_cursor];
+                if self.app_mode == AppMode::CommandHistory || self.app_mode == AppMode::Bookmark {
+                    let selected_cmd = &self.content_to_read[self.app_ui.content_cursor];
                     self.command = selected_cmd.clone();
                 } else {
                     if self.sugest.len() > 0 {
@@ -440,7 +463,9 @@ impl App {
                         }
 
                         ns.push_str(&path_selected.file_name);
-                        ns = ns.replace(" ", "\\ ");
+                        if ns.contains(" ") {
+                            ns = format!("\"{}\"", ns);
+                        }
 
                         self.command.push_str(&ns.as_str());
                         self.x_cursor += ns.len() as u16;
@@ -448,7 +473,26 @@ impl App {
                 }
             }
 
+            KeyCode::Delete => {
+                if self.app_mode == AppMode::Bookmark {
+                    let selected = &self.content_to_read[self.app_ui.content_cursor];
+
+                    // if let Some(index) = self.config.bookmark.iter().position(|x| x == selected) {
+                    //     self.config.bookmark.remove(index);
+                    // }
+                    self.config.bookmark.retain(|x| !x.eq(selected));
+                    self.re_read = true;
+                }
+            }
+
             KeyCode::Enter => {
+                if self.app_mode == AppMode::Bookmark {
+                    if self.content_to_read.len() != 0 {
+                        let selected = &self.content_to_read[self.app_ui.content_cursor];
+                        self.command = format!("cd {}", selected.clone());
+                        self.app_mode = AppMode::Normal;
+                    }
+                }
                 if key_event.modifiers.contains(KeyModifiers::ALT) {
                     self.open_dir()?;
                 } else {
@@ -461,10 +505,6 @@ impl App {
             }
             _ => {}
         }
-
-        // if self.app_mode == AppMode::CommandHistory && self.command.is_empty() {
-
-        // }
 
         Ok(())
     }
@@ -480,24 +520,24 @@ impl App {
                 }
             }
 
-            "back" | ":b" => {
-                if !self.current_path.eq(&PathBuf::from("/")) {
-                    // let new_path_nav = N;
-                    self.current_path = pathmanager::resolve_path(
-                        &self.current_path,
-                        &pathmanager::convert_path_to_nav("../")?,
-                    )?;
-
-                    self.re_read = true;
-                }
-            }
-
-            ":toogle_hidden_file" => {
+            ":toogle_hidden_file" | ":hf" => {
                 let is_hidden = self.config.hide_hidden_file;
                 self.config.hide_hidden_file = !is_hidden;
                 self.re_read = true;
             }
             ":t" | ":terminal" => self.app_mode = AppMode::TerminalOnly,
+
+            ":bookmark add" | ":ba" => {
+                let cmd = self.current_path.to_string_lossy().into_owned();
+                if !self.config.bookmark.contains(&cmd) {
+                    self.config.bookmark.insert(0, cmd);
+                }
+            }
+
+            ":bookmark" | ":b" => {
+                self.app_mode = AppMode::Bookmark;
+                self.re_read = true
+            }
 
             s if s.starts_with("luru") | s.starts_with("sudo luru") => {
                 // self.termin_run();
@@ -513,7 +553,8 @@ impl App {
                 if cd_args.len() < 1 {
                     self.decs_label = String::from("invalid argument");
                 } else {
-                    let nav_cmd = pathmanager::convert_path_to_nav(cd_args[1])?;
+                    let p = cd_args[1..].join(" ");
+                    let nav_cmd = pathmanager::convert_path_to_nav(p.as_str())?;
                     self.current_path = pathmanager::resolve_path(&self.current_path, &nav_cmd)?;
 
                     self.re_read = true;
@@ -537,12 +578,13 @@ impl App {
                     self.app_term.run(self.command.clone())?;
                 } else {
                     // self.app_ui.end()?;
-
                     self.app_ui.set_alternate_screen(false)?;
+
                     self.app_ui.print_term_start(
                         &format!("{}", self.current_path.display()),
                         // &self.command,
                     )?;
+
                     print!("{} \n", &self.command);
                     self.app_term.run(self.command.clone())?;
                     self.app_ui.print_term_end()?;

@@ -154,12 +154,11 @@ impl UI {
         Ok(())
     }
 
-    fn trim_to_window_width(&self, s: &str) -> String {
-        let max_width = self.window_size.0 as usize;
-        if s.len() <= max_width {
+    pub fn trim_str_to(&self, s: &str, to: usize) -> String {
+        if s.len() <= to {
             s.to_string()
         } else {
-            s[(s.len() + 3) - max_width..].to_string()
+            s[s.len() - to..].to_string()
         }
     }
 
@@ -174,7 +173,7 @@ impl UI {
         };
 
         let path_str = self.path_label.to_string_lossy();
-        let trimmed_path = self.trim_to_window_width(&path_str);
+        let trimmed_path = self.trim_str_to(&path_str, (self.window_size.0 - 3) as usize);
 
         execute!(
             self.stdout,
@@ -183,21 +182,6 @@ impl UI {
             style::Print(trimmed_path),
             style::ResetColor,
         )?;
-
-        // self.stdout.write(self.path_label.as_bytes()).unwrap();
-        // execute!(
-        //     self.stdout,
-        //     SetForegroundColor(style::Color::Black),
-        //     SetBackgroundColor(path_label_coolor),
-        //     style::Print(format!(
-        //         "{}",
-        //         // display_from,
-        //         // path_display
-        //         str_slince(&path_display, display_from, get_char_len(&path_display)) // &(path_display[display_from..path_display.len()])
-        //     )),
-        //     style::ResetColor,
-        // )
-        // .unwrap();
 
         self.move_cursor(0, self.window_size.1 - 3)?;
         execute!(
@@ -234,10 +218,6 @@ impl UI {
             self.content_cursor = 0;
         }
 
-        // if self
-        //     .content_render_from
-        //     .wrapping_add(self.content_render_items as usize)
-        //     >= self.content_cursor
         if self.content_cursor <= self.content_render_from {
             if self.content_cursor > 0 {
                 self.content_render_from = self.content_cursor - 1;
@@ -254,12 +234,7 @@ impl UI {
                 self.content_cursor - (self.content_render_items as usize) + 1;
         }
 
-        for (i, val_r) in content
-            .iter()
-            // .skip(self.content_render_from as usize)
-            // .take(self.content_render_items as usize)
-            .enumerate()
-        {
+        for (i, val_r) in content.iter().enumerate() {
             if i < self.content_render_from as usize {
                 continue;
             };
@@ -269,7 +244,7 @@ impl UI {
             let mut val = format!(
                 "{}",
                 // i,
-                str_slince(val_r, 0, p) // &(val_r[0..val_r.len().min(self.window_size.0.wrapping_sub(3) as usize)])
+                str_slince(val_r, 0, p)
             );
 
             if p < self.window_size.0 as usize {
@@ -283,35 +258,12 @@ impl UI {
             let x = 0;
             let y = (1 + i - self.content_render_from) as u16;
 
-            if y > self.content_render_items.wrapping_add(1) {
+            if y > (self.content_render_items + 1) {
                 continue;
             };
 
             self.move_cursor(x, y)?;
-            if y == 1 && self.content_render_from > 0 {
-                execute!(
-                    self.stdout,
-                    // SetBackgroundColor(style::Colo)
-                    SetForegroundColor(style::Color::DarkGrey),
-                    style::Print(format!("...{} items", self.content_render_from)),
-                    style::ResetColor,
-                )?;
-            } else if y == self.content_render_items.wrapping_add(1)
-                && content.len() - (self.content_render_from + self.content_render_items as usize)
-                    != 0
-            {
-                execute!(
-                    self.stdout,
-                    SetForegroundColor(style::Color::DarkGrey),
-                    style::Print(format!(
-                        "...{} items",
-                        content.len().wrapping_sub(
-                            self.content_render_from + self.content_render_items as usize
-                        )
-                    )),
-                    style::ResetColor,
-                )?;
-            } else if i == self.content_cursor as usize {
+            if i == self.content_cursor as usize {
                 execute!(
                     self.stdout,
                     // SetForegroundColor(style::Color::White),
@@ -326,6 +278,46 @@ impl UI {
                     style::Print(format!("\x1b[2m{}\x1b[0m", val))
                 )?;
             }
+        }
+
+        let render_from_sub_render_items =
+            self.content_render_from + self.content_render_items as usize;
+
+        if self.content_render_from > 0 {
+            self.move_cursor(0, 1)?;
+            execute!(
+                self.stdout,
+                // SetBackgroundColor(style::Colo)
+                SetForegroundColor(style::Color::DarkGrey),
+                style::Print(format!("...{} items", self.content_render_from)),
+                style::ResetColor,
+            )?;
+        }
+
+        let label = format!(
+            "...{} items",
+            content.len().saturating_sub(render_from_sub_render_items)
+        );
+
+        self.move_cursor(0, self.safe_height.1 - 1)?;
+        if content.len().saturating_sub(render_from_sub_render_items) > 0 {
+            execute!(
+                self.stdout,
+                SetForegroundColor(style::Color::DarkGrey),
+                style::Print(format!(
+                    "{}{}",
+                    &label,
+                    String::from(" ").repeat((self.window_size.0 as usize) - label.len())
+                )),
+                style::ResetColor,
+            )?;
+        } else {
+            execute!(
+                self.stdout,
+                SetForegroundColor(style::Color::DarkGrey),
+                style::Print(String::from(" ").repeat(self.window_size.0 as usize)),
+                style::ResetColor,
+            )?;
         }
 
         execute!(self.stdout, style::ResetColor)?;
