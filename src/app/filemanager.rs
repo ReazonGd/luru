@@ -1,7 +1,12 @@
 extern crate chrono;
 
 // use chrono::{DateTime, Local};
-use std::{fs, io, path::PathBuf, time::SystemTime};
+use std::{
+    fs,
+    io::{self, Read},
+    path::PathBuf,
+    time::SystemTime,
+};
 
 use super::pathmanager::{convert_path_to_nav, NavigationCommand};
 
@@ -13,49 +18,32 @@ pub struct ReadDirItems {
     pub file_name: String,
 }
 
-pub fn read_dir(path: &PathBuf) -> io::Result<Vec<ReadDirItems>> {
+pub fn read_dir(path: &PathBuf, hide_hidden_file: &bool) -> io::Result<Vec<ReadDirItems>> {
     let mut res = Vec::new();
 
     if path.is_dir() && path.exists() {
         let entries = fs::read_dir(path);
 
         if let Err(_) = entries {
-
-            // return Err(e);
         } else if let Ok(val) = entries {
-            // if path.eq(&PathBuf::from("/")) {
-            //     res.push(items {
-            //         path:
-            //     });
-            // }
-
             for entry in val {
                 let entry = entry.unwrap();
                 let path = entry.path();
 
                 let mut name = String::new();
-
-                // let metadata = path.metadata()?;
-
-                // if let Ok(time) = metadata.modified() {
-                //     let date_time: DateTime<Local> = time.into();
-                //     name.push_str(format!("{}  ", date_time.format("%d-%m-%Y")).as_str());
-                // } else {
-                //     name.push_str("-  ");
-                // }
-
                 let file_name = path.file_name().unwrap();
                 let file_name = file_name.to_str().unwrap();
 
+                if *hide_hidden_file && file_name.starts_with('.') {
+                    continue;
+                }
                 if path.is_dir() {
                     name.push_str("🖿 ");
-                    // name.push('/');
                 } else {
                     name.push_str("📑 ");
                 }
 
                 name.push_str(&file_name);
-                // name.push_str(" ".repeat().as_str());
 
                 res.push(ReadDirItems {
                     navigation_type: convert_path_to_nav(path.clone().to_str().unwrap())?,
@@ -66,8 +54,6 @@ pub fn read_dir(path: &PathBuf) -> io::Result<Vec<ReadDirItems>> {
             }
         }
     } else {
-        // Err(io::Error::new(io::ErrorKind::NotFound, "Not a directory"))?
-        // res.push(String::from("/"));
     }
     Ok(res)
 }
@@ -99,4 +85,17 @@ pub fn metadata(path: &PathBuf) -> io::Result<MetadataInfo> {
         size,
         modified: format!("{:?}", modified),
     })
+}
+
+pub fn read_file(path: &PathBuf) -> io::Result<String> {
+    // read file. if file not found, create it;
+    if path.exists() {
+        let mut file = fs::File::open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        Ok(contents)
+    } else {
+        fs::write(path, "")?;
+        Ok(String::new())
+    }
 }

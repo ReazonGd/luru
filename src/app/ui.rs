@@ -8,7 +8,7 @@ use crossterm::{
     execute,
     // queue,
     style::{self, ResetColor, SetForegroundColor},
-    terminal,
+    terminal::{self},
 };
 
 fn str_slince(arg: &str, from: usize, to: usize) -> String {
@@ -53,8 +53,7 @@ impl UI {
     }
     pub fn begin(&mut self) -> io::Result<()> {
         // terminal::enable_raw_mode()?;
-        self.raw_mode(true)?;
-        execute!(self.stdout, terminal::EnterAlternateScreen)?;
+        self.set_alternate_screen(true)?;
         self.window_size = terminal::size()?;
         self.safe_height = (2, self.window_size.1 - 3);
         self.content_cursor = 0;
@@ -71,6 +70,17 @@ impl UI {
         Ok(())
     }
 
+    pub fn set_alternate_screen(&mut self, mode: bool) -> io::Result<()> {
+        if mode {
+            self.raw_mode(true)?;
+            execute!(self.stdout, terminal::EnterAlternateScreen)?;
+        } else {
+            self.raw_mode(false)?;
+            execute!(self.stdout, terminal::LeaveAlternateScreen)?;
+        }
+
+        Ok(())
+    }
     pub fn raw_mode(&mut self, mode: bool) -> io::Result<()> {
         if mode {
             terminal::enable_raw_mode()?;
@@ -83,10 +93,7 @@ impl UI {
 
     pub fn end(&mut self) -> io::Result<()> {
         self.clear_screen()?;
-        // self.move_cursor(0, 0)?;
-        terminal::disable_raw_mode()?;
-        execute!(self.stdout, terminal::LeaveAlternateScreen)?;
-        self.raw_mode(false)?;
+        self.set_alternate_screen(false)?;
         self.stdout.flush()?;
 
         Ok(())
@@ -192,14 +199,20 @@ impl UI {
         // )
         // .unwrap();
 
-        self.move_cursor(0, self.window_size.1 - 2)?;
-        // self.stdout.write(self.desc_label.as_bytes()).unwrap();
+        self.move_cursor(0, self.window_size.1 - 3)?;
         execute!(
             self.stdout,
             style::ResetColor,
             style::Print(&self.desc_label)
         )?;
 
+        self.move_cursor(0, self.window_size.1 - 2)?;
+        execute!(
+            self.stdout,
+            SetForegroundColor(style::Color::DarkMagenta),
+            style::Print(String::from("-").repeat(self.window_size.0 as usize)),
+            style::ResetColor,
+        )?;
         self.move_cursor(0, self.window_size.1 - 1)?;
         execute!(
             self.stdout,
@@ -343,7 +356,7 @@ impl UI {
             self.stdout,
             style::ResetColor,
             SetForegroundColor(style::Color::DarkGreen),
-            style::Print("\n[Program Ended]"),
+            style::Print("\n[Luru]"),
             SetForegroundColor(style::Color::DarkBlue),
             style::Print("Press Enter to close"),
             style::ResetColor,

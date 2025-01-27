@@ -86,7 +86,7 @@ impl App {
         let mut dirs: Vec<ReadDirItems> = Vec::new();
         let mut files: Vec<ReadDirItems> = Vec::new();
 
-        let r = filemanager::read_dir(&self.current_path);
+        let r = filemanager::read_dir(&self.current_path, &self.config.hide_hidden_file);
 
         if let Err(e) = r {
             self.decs_label = format!("\x1b[97m\x1b[41mgot an error! kind of:{}\x1b[0m", e.kind());
@@ -195,6 +195,8 @@ impl App {
                     _ => {}
                 }
 
+                self.decs_label =  format!("\x1b[1m\x1b[035m{}\x1b[0m exit \x1b[1m\x1b[035m{}\x1b[0m terminal only \x1b[1m\x1b[035m{}\x1b[0m command historys", "^c", "^t", "^h");
+
                 self.app_ui.clear_screen()?;
                 self.re_read = false;
             }
@@ -212,7 +214,7 @@ impl App {
     }
 
     fn find_sugest(&mut self) -> io::Result<()> {
-        if (self.x_cursor as usize) < self.command.len() {
+        if (self.x_cursor as usize) < self.command.len() || self.command.is_empty() {
             return Ok(());
         }
 
@@ -297,7 +299,7 @@ impl App {
         self.app_ui.move_cursor(2, self.app_ui.window_size.1)?;
         // self.app_ui.print(content);
         self.app_ui.print(&format!(
-            "{}\x1b[2m{}\x1b[0m",
+            "{}\x1b[33m\x1b[2m{}\x1b[0m",
             &self.command,
             String::from("/")
                 .repeat(self.app_ui.window_size.0 as usize - (self.command.len() + 3))
@@ -325,10 +327,9 @@ impl App {
 
     fn termin_run(&mut self) -> io::Result<()> {
         self.app_ui.clear_screen()?;
-        self.app_ui.move_cursor(0, 0)?;
-        self.app_ui.raw_mode(false)?;
+        self.app_ui.set_alternate_screen(false)?;
         // self.app_ui.end()?;
-        print!("Any command will run with \x1b[1m\x1b[093m\"sh -c [cmd]\"\x1b[0m you can type \x1b[1m\x1b[035mluru\x1b[0m or \x1b[1m\x1b[035mexit\x1b[0m to back");
+        print!("\n[LURU]\nAny command will run with \x1b[1m\x1b[093m\"sh -c [cmd]\"\x1b[0m you can type \x1b[1m\x1b[035mluru\x1b[0m or \x1b[1m\x1b[035mexit\x1b[0m to back");
         while self.app_mode == AppMode::TerminalOnly {
             self.app_ui
                 .print_term_start(&format!("{}", self.current_path.display()))?;
@@ -336,8 +337,7 @@ impl App {
 
             self.command_handler()?;
         }
-        self.app_ui.raw_mode(true)?;
-        // self.app_ui.begin()?;
+        self.app_ui.set_alternate_screen(true)?;
         self.current_path = env::current_dir()?;
         self.re_read = true;
         Ok(())
@@ -449,7 +449,7 @@ impl App {
             }
 
             KeyCode::Enter => {
-                if key_event.modifiers.contains(KeyModifiers::SHIFT) {
+                if key_event.modifiers.contains(KeyModifiers::ALT) {
                     self.open_dir()?;
                 } else {
                     // self.command_history.push(self.command.clone());
@@ -492,6 +492,13 @@ impl App {
                 }
             }
 
+            ":toogle_hidden_file" => {
+                let is_hidden = self.config.hide_hidden_file;
+                self.config.hide_hidden_file = !is_hidden;
+                self.re_read = true;
+            }
+            ":t" | ":terminal" => self.app_mode = AppMode::TerminalOnly,
+
             s if s.starts_with("luru") | s.starts_with("sudo luru") => {
                 // self.termin_run();
                 self.app_mode = AppMode::Normal;
@@ -530,9 +537,8 @@ impl App {
                     self.app_term.run(self.command.clone())?;
                 } else {
                     // self.app_ui.end()?;
-                    self.app_ui.clear_screen()?;
-                    self.app_ui.move_cursor(0, 0)?;
-                    self.app_ui.raw_mode(false)?;
+
+                    self.app_ui.set_alternate_screen(false)?;
                     self.app_ui.print_term_start(
                         &format!("{}", self.current_path.display()),
                         // &self.command,
@@ -540,10 +546,9 @@ impl App {
                     print!("{} \n", &self.command);
                     self.app_term.run(self.command.clone())?;
                     self.app_ui.print_term_end()?;
-                    let mut d = String::new();
-                    io::stdin().read_line(&mut d)?;
-                    // self.app_ui.begin()?;
-                    self.app_ui.raw_mode(true)?;
+                    io::stdin().read_line(&mut String::new())?;
+
+                    self.app_ui.set_alternate_screen(true)?;
                     self.current_path = env::current_dir()?;
 
                     // self.current_path = self.app_term.running_path.clone();
