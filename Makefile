@@ -10,7 +10,7 @@ all: build
 # Build proyek menggunakan cargo
 .PHONY: build
 build:
-	cargo build --release
+	@sudo cargo build --release
 
 # Install biner ke /usr/local/bin
 .PHONY: install

@@ -11,6 +11,7 @@ pub struct Config {
 
     pub history_path: PathBuf,
     pub command_history: Vec<String>,
+    pub bookmark: Vec<String>,
 }
 
 impl Config {
@@ -36,6 +37,7 @@ impl Config {
         Ok(Config {
             working_path: PathBuf::from("/"),
             command_history: Vec::new(),
+            bookmark: Vec::new(),
             hide_hidden_file: true,
             config_file_path: temp_path,
             history_path,
@@ -63,6 +65,10 @@ impl Config {
                 "HIDE_HIDDEN_FILE" => {
                     self.hide_hidden_file = vv[1].parse().unwrap_or(false);
                 }
+                "BOOKMARK" => {
+                    let val = vv[1];
+                    self.bookmark = val.to_string().split(";").map(|s| s.to_string()).collect();
+                }
                 _ => {}
             }
         }
@@ -86,9 +92,10 @@ impl Config {
 
     pub fn save(&mut self) -> io::Result<()> {
         let content = format!(
-            "WORKING_PATH={}\nHIDE_HIDDEN_FILE={}",
+            "WORKING_PATH={}\nHIDE_HIDDEN_FILE={}\nBOOKMARK={}",
             self.working_path.display(),
-            self.hide_hidden_file.to_string()
+            self.hide_hidden_file.to_string(),
+            self.bookmark.join(";")
         );
         fs::write(&self.config_file_path, content)?;
 
