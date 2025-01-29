@@ -11,7 +11,11 @@ File Explorer and terminal at same time. A terminal tool to help finding a your 
 
 # Instalations
 
-To install luru, you can build and install manualy with ``make install``
+To install luru,make sure you have cargo. and then,
+```sh
+make build
+make install
+```
 
 
  
