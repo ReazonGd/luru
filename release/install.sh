@@ -26,7 +26,7 @@ fi
 BINARY_URL="https://raw.githubusercontent.com/ReazonGd/luru/refs/heads/main/release/luru"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="luru"
-TEMP_DIR=$(mktemp -d)
+TEMP_DIR=$(mktemp -d)"/$BINARY_NAME"
 
 # Unduh biner
 echo "Downloading $BINARY_NAME from $BINARY_URL..."
