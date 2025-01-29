@@ -12,7 +12,7 @@ File Explorer and terminal at same time. A terminal tool to help finding a your 
 
 **Quick Install**
 ```sh
-culr -LsSf https://raw.githubusercontent.com/ReazonGd/luru/refs/heads/main/release/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/ReazonGd/luru/refs/heads/main/release/install.sh | sh
 ```
 
 **Build and Install**
