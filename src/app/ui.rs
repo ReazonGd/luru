@@ -187,7 +187,11 @@ impl UI {
         execute!(
             self.stdout,
             style::ResetColor,
-            style::Print(&self.desc_label)
+            style::Print(format!(
+                "{}{}",
+                &self.desc_label,
+                String::from(" ").repeat(self.window_size.0 as usize)
+            )),
         )?;
 
         self.move_cursor(0, self.window_size.1 - 2)?;
@@ -332,7 +336,7 @@ impl UI {
             self.stdout,
             style::ResetColor,
             SetForegroundColor(style::Color::DarkGreen),
-            style::Print("\n[Luru]"),
+            style::Print("\n\x1b[1m[Luru]"),
             SetForegroundColor(style::Color::DarkBlue),
             style::Print(format!(" {}>", &path_label)),
             SetForegroundColor(style::Color::DarkMagenta),
