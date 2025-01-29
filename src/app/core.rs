@@ -1,4 +1,4 @@
-use std::{env, io, path::PathBuf};
+use std::{env, io::{self, Write}, path::PathBuf};
 
 use super::{
     config::Config,
@@ -37,6 +37,7 @@ pub struct App {
     x_cursor: u16,
     re_read: bool,
     quit: bool,
+    is_ignore_exec: bool,
 }
 
 impl App {
@@ -78,6 +79,7 @@ impl App {
             re_read: true,
             quit: false,
             sugest: String::new(),
+            is_ignore_exec: false,
         })
     }
 
@@ -201,9 +203,6 @@ impl App {
                     }
                     _ => {}
                 }
-
-                self.decs_label =  format!("\x1b[1m\x1b[035m{}\x1b[0m exit \x1b[1m\x1b[035m{}\x1b[0m terminal only \x1b[1m\x1b[035m{}\x1b[0m command historys", "^c", "^t", "^h");
-
                 self.app_ui.clear_screen()?;
                 self.re_read = false;
             }
@@ -294,8 +293,31 @@ impl App {
         // self.decs_label = format!("sugest : ", word, self.sugest);
     }
 
+    fn decide_decs_label(&mut self) {
+        if self.app_mode == AppMode::Normal {
+            
+            match self.command.trim() {
+                s if s.starts_with("exit")  => self.decs_label = format!("Exit from application"),
+                _ => 
+                self.decs_label =  format!("\x1b[1m\x1b[035m{}\x1b[0m exit \x1b[1m\x1b[035m{}\x1b[0m terminal only \x1b[1m\x1b[035m{}\x1b[0m command historys", "^c", "^t", "^h")
+            }
+        
+        } else if self.app_mode == AppMode::Bookmark || self.app_mode == AppMode::CommandHistory {
+            self.decs_label = format!(
+                "\x1b[1m\x1b[035m{}\x1b[0m exit \x1b[1m\x1b[035m{}\x1b[0m back",
+                "^c", "Esc",
+            );
+        }
+
+        if self.is_ignore_exec {
+            self.decs_label = format!( "ignoring enter to exec, press \x1b[1m\x1b[035m{}\x1b[0m again to disable",
+            "insert",);
+        }
+    }
+
     fn display_ui(&mut self) -> io::Result<()> {
         // self.decs_label = format!("type 'exit' to exit");
+        self.decide_decs_label();
 
         self.app_ui
             .set_frame_content(self.current_path.clone(), self.decs_label.clone())?;
@@ -318,6 +340,10 @@ impl App {
                 self.app_ui.window_size.0.saturating_sub(3) as usize,
             )
             .to_string();
+
+        if self.is_ignore_exec {
+            self.app_ui.print(&format!("\x1b[2m"))?;
+        }
 
         self.app_ui.print(&format!(
             "{}\x1b[33m\x1b[2m{}\x1b[0m",
@@ -348,6 +374,15 @@ impl App {
         self.command_history.insert(0, cmd);
     }
 
+    fn push_notif(&mut self, msg: &str) -> io::Result<()> {
+        self.app_ui.set_alternate_screen(false)?;
+        print!("[Notify] {}", msg);
+        self.app_ui.stdout.flush()?;
+        io::stdin().read_line(&mut String::new())?;
+        self.app_ui.set_alternate_screen(true)?;
+
+        Ok(())
+    }
     fn termin_run(&mut self) -> io::Result<()> {
         self.app_ui.set_alternate_screen(false)?;
         // self.clear_exec()?;
@@ -485,6 +520,11 @@ impl App {
                 }
             }
 
+           KeyCode::Insert => 
+            self.is_ignore_exec =!self.is_ignore_exec,
+ 
+    
+
             KeyCode::Enter => {
                 if self.app_mode == AppMode::Bookmark {
                     if self.content_to_read.len() != 0 {
@@ -493,7 +533,7 @@ impl App {
                         self.app_mode = AppMode::Normal;
                     }
                 }
-                if key_event.modifiers.contains(KeyModifiers::ALT) {
+                if self.is_ignore_exec {
                     self.open_dir()?;
                 } else {
                     // self.command_history.push(self.command.clone());
@@ -528,10 +568,13 @@ impl App {
             ":t" | ":terminal" => self.app_mode = AppMode::TerminalOnly,
 
             ":bookmark add" | ":ba" => {
-                let cmd = self.current_path.to_string_lossy().into_owned();
-                if !self.config.bookmark.contains(&cmd) {
-                    self.config.bookmark.insert(0, cmd);
+                let path = self.current_path.to_string_lossy().into_owned();
+                if !self.config.bookmark.contains(&path) {
+                    self.config.bookmark.insert(0, path.clone());
                 }
+
+                 self.push_notif( &format!("\x1b[1m\x1b[035m{}\x1b[0m has added to bookmark", &path).as_str())?;
+                
             }
 
             ":bookmark" | ":b" => {

@@ -1,7 +1,8 @@
 # Variabel
 BINARY_NAME := luru
 INSTALL_DIR := /usr/local/bin
-TARGET := target/release/$(BINARY_NAME)
+TARGET := release/$(BINARY_NAME)
+# TARGET := target/release/$(BINARY_NAME)
 
 # Default target
 .PHONY: all
@@ -10,11 +11,13 @@ all: build
 # Build proyek menggunakan cargo
 .PHONY: build
 build:
-	@sudo cargo build --release
+	cargo build --release
+	sudo cp target/release/$(BINARY_NAME) release/
+
 
 # Install biner ke /usr/local/bin
 .PHONY: install
-install: build
+install: 
 	@echo "Installing $(BINARY_NAME) to $(INSTALL_DIR)..."
 	@sudo install -Dm755 $(TARGET) $(INSTALL_DIR)/$(BINARY_NAME)
 	@echo "Installation complete!"

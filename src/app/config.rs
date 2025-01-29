@@ -16,23 +16,18 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> io::Result<Self> {
-        let temp_folder = env::temp_dir();
+        let nav_to_config_folder = pathmanager::convert_path_to_nav("~/.config/luru")?;
+        let config_folder = pathmanager::resolve_path(&PathBuf::from("/"), &nav_to_config_folder)?;
+
+        if !config_folder.exists() {
+            fs::create_dir_all(&config_folder)?;
+        }
+
         let nav_to_app_temp = pathmanager::convert_path_to_nav("luru")?;
-        let temp_path = pathmanager::resolve_path(&temp_folder, &nav_to_app_temp)?;
+        let temp_path = pathmanager::resolve_path(&config_folder, &nav_to_app_temp)?;
 
         let nav_to_app_command_history = pathmanager::convert_path_to_nav("luru-cmd.log")?;
-        let history_path = pathmanager::resolve_path(&temp_folder, &nav_to_app_command_history)?;
-
-        // let file = File::open(&temp_path);
-        // if let Err(_) = file {
-        //     let content = format!("WORKING_PATH=");
-        //     fs::write(&temp_path, content)?;
-        // }
-
-        // let file = File::open(&history_path);
-        // if let Err(_) = file {
-        //     fs::write(&history_path, "")?;
-        // }
+        let history_path = pathmanager::resolve_path(&config_folder, &nav_to_app_command_history)?;
 
         Ok(Config {
             working_path: PathBuf::from("/"),

@@ -23,7 +23,7 @@ else
 fi
 
 # URL untuk biner
-BINARY_URL="https://github.com/$REPO/releases/download/$VERSION/mybinary-$PLATFORM-$ARCH"
+BINARY_URL="https://raw.githubusercontent.com/ReazonGd/luru/refs/heads/main/release/luru"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="luru"
 
