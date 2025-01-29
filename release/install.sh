@@ -26,16 +26,17 @@ fi
 BINARY_URL="https://raw.githubusercontent.com/ReazonGd/luru/refs/heads/main/release/luru"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="luru"
+TEMP_DIR=$(mktemp -d)
 
 # Unduh biner
 echo "Downloading $BINARY_NAME from $BINARY_URL..."
-curl -LsSf "$BINARY_URL" -o "$BINARY_NAME"
+curl -LsSf "$BINARY_URL" -o "$TEMP_DIR"
 
 # Beri izin eksekusi
-chmod +x "$BINARY_NAME"
+chmod +x "$TEMP_DIR"
 
 # Pindahkan ke direktori instalasi
 echo "Installing $BINARY_NAME to $INSTALL_DIR..."
-sudo mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+sudo mv "$TEMP_DIR" "$INSTALL_DIR/$BINARY_NAME"
 
 echo "Installation complete! You can now use $BINARY_NAME."
