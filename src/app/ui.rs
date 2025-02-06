@@ -291,7 +291,6 @@ impl UI {
             self.move_cursor(0, 1)?;
             execute!(
                 self.stdout,
-                // SetBackgroundColor(style::Colo)
                 SetForegroundColor(style::Color::DarkGrey),
                 style::Print(format!("...{} items", self.content_render_from)),
                 style::ResetColor,

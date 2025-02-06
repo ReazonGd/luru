@@ -15,12 +15,15 @@ impl Termin {
             return Ok(false);
         }
 
+        let mut arg = input.clone();
+        arg.push_str(" && pwd");
+
         let stdin = Stdio::inherit();
         let stdout = Stdio::inherit();
 
         let output = Command::new("sh")
             .arg("-c")
-            .arg(input)
+            .arg(arg)
             .stdin(stdin)
             .stdout(stdout)
             .spawn();
