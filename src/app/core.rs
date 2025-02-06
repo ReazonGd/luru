@@ -532,6 +532,10 @@ impl App {
                         self.command = format!("cd {}", selected.clone());
                         self.app_mode = AppMode::Normal;
                     }
+                } else if self.app_mode == AppMode::CommandHistory {
+                    let selected = &self.content_to_read[self.app_ui.content_cursor];
+                        self.command = selected.clone();
+                        self.app_mode = AppMode::Normal;
                 }
                 if self.is_ignore_exec {
                     self.open_dir()?;
