@@ -12,6 +12,19 @@ pub struct Config {
     pub history_path: PathBuf,
     pub command_history: Vec<String>,
     pub bookmark: Vec<String>,
+    pub command_option_path: PathBuf,
+    pub run_options: Vec<RunOption>,
+}
+
+#[derive(Clone, Debug)]
+pub struct RunOptionCommand {
+    pub name: String,
+    pub run: String,
+}
+#[derive(Clone, Debug)]
+pub struct RunOption {
+    pub filetype_name: String,
+    pub commands: Vec<RunOptionCommand>,
 }
 
 impl Config {
@@ -26,8 +39,14 @@ impl Config {
         let nav_to_app_temp = pathmanager::convert_path_to_nav("luru")?;
         let temp_path = pathmanager::resolve_path(&config_folder, &nav_to_app_temp)?;
 
-        let nav_to_app_command_history = pathmanager::convert_path_to_nav("luru-cmd.log")?;
+        let nav_to_app_command_history: pathmanager::NavigationCommand =
+            pathmanager::convert_path_to_nav("luru-cmd.log")?;
         let history_path = pathmanager::resolve_path(&config_folder, &nav_to_app_command_history)?;
+
+        let nav_to_app_command_option: pathmanager::NavigationCommand =
+            pathmanager::convert_path_to_nav("luru-cmd-opt.txt")?;
+        let command_option_path =
+            pathmanager::resolve_path(&config_folder, &nav_to_app_command_option)?;
 
         Ok(Config {
             working_path: PathBuf::from("/"),
@@ -36,6 +55,8 @@ impl Config {
             hide_hidden_file: true,
             config_file_path: temp_path,
             history_path,
+            command_option_path,
+            run_options: vec![],
         })
     }
 
@@ -69,7 +90,9 @@ impl Config {
         }
 
         // load history
-        self.load_history()
+        self.load_history()?;
+        self.load_command_option()?;
+        Ok(())
     }
 
     pub fn load_history(&mut self) -> io::Result<()> {
@@ -80,6 +103,68 @@ impl Config {
         for line in file.split('\n') {
             let line = line.to_string();
             self.command_history.push(line);
+        }
+
+        Ok(())
+    }
+
+    pub fn load_command_option(&mut self) -> io::Result<()> {
+        let file;
+        if !self.config_file_path.exists() {
+            let text = r#"# line start with hashtag will be ignored
+# line start with @ start new type for run option. and @ again to end it
+# a run option separated by "=". first one is name, and run script  
+
+# a template surounded by {{name}} please do exact for replacement 
+# {{path}} will replaced to full path  
+# {{filename}} will replaced to file name, example: "note.txt"
+# {{base64}} will replaced to file name encoded in base64
+
+@ .
+nano=nano {{path}}
+
+@ txt
+nano=nano {{path}}
+
+# ends
+@"#;
+            let content = format!("{}", text);
+            file = content.clone();
+            fs::write(&self.command_option_path, content)?;
+        } else {
+            file = filemanager::read_file(&self.command_option_path)?;
+        }
+
+        //
+        self.run_options = vec![];
+        let mut curent_run_option: RunOption = RunOption {
+            filetype_name: "".to_string(),
+            commands: vec![],
+        };
+
+        for line in file.split('\n') {
+            let line = line.to_string();
+            if line.starts_with("#") {
+                continue;
+            } else if line.starts_with("@") {
+                if !curent_run_option.filetype_name.is_empty()
+                    && curent_run_option.commands.len() > 0
+                {
+                    self.run_options.push(curent_run_option.clone());
+                    curent_run_option = RunOption {
+                        filetype_name: "".to_string(),
+                        commands: vec![],
+                    };
+                }
+                let filetypename = &line[1..].trim().to_owned();
+                curent_run_option.filetype_name = filetypename.to_lowercase().clone();
+            } else if line.contains("=") {
+                let rows: Vec<&str> = line.split("=").collect();
+                curent_run_option.commands.push(RunOptionCommand {
+                    name: format!("{}", rows[0]),
+                    run: format!("{}", rows[1]),
+                });
+            }
         }
 
         Ok(())

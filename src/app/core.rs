@@ -1,8 +1,8 @@
 use std::{env, io::{self, Write}, path::PathBuf};
 
 use super::{
-    config::Config,
-    filemanager::{self, ReadDirItems},
+    config::{Config, RunOptionCommand},
+    filemanager::{self, MetadataInfo, ReadDirItems},
     keyboard, pathmanager,
     termin::Termin,
     ui::UI,
@@ -15,7 +15,9 @@ enum AppMode {
     CommandHistory,
     TerminalOnly,
     Bookmark,
+    OpenCommandOption(MetadataInfo),
 }
+
 
 pub struct App {
     current_path: PathBuf,
@@ -31,6 +33,7 @@ pub struct App {
     command_history: Vec<String>,
 
     config: Config,
+    run_options: Vec<RunOptionCommand>,
 
     app_mode: AppMode,
 
@@ -75,6 +78,7 @@ impl App {
             command_history: config.command_history.clone(),
             content_to_read: Vec::<String>::new(),
             config,
+            run_options: vec![],
             x_cursor: 0,
             re_read: true,
             quit: false,
@@ -145,14 +149,12 @@ impl App {
             self.re_read = true;
         }
         if path_selected.path.is_file() {
-            let meta = filemanager::metadata(&path_selected.path)?;
-            // set desc to file information
-            self.decs_label = format!(
-                "\x1b[34mfile: {} size: {} modified: {}\x1b[0m",
-                meta.display_name, meta.size, meta.modified
-            );
-        }
+            let meta: filemanager::MetadataInfo = filemanager::metadata(&path_selected.path)?;
 
+            self.re_read = true;
+            self.app_mode = AppMode::OpenCommandOption(meta);
+
+        }
         Ok(())
     }
 
@@ -169,7 +171,7 @@ impl App {
             if self.re_read {
                 let is_cd: bool = !self.current_path.eq(&self.temp_path);
 
-                match self.app_mode {
+                match &self.app_mode {
                     AppMode::Normal => {
                         self.do_a_scan()?;
                         if is_cd {
@@ -184,12 +186,6 @@ impl App {
 
                         self.content_to_read =
                             self.content.iter().map(|f| f.label.clone()).collect();
-
-                        // let path_label = self.current_path.to_string_lossy().into_owned();
-                        // if self.config.bookmark.contains(&path_label) {
-                        //     self.app_ui.move_cursor(0, 0)?;
-                        //     self.app_ui.print(&format!("\x1b[035m🗀\x1b[0m"))?;
-                        // }
                     }
                     AppMode::CommandHistory => {
                         self.content_to_read = self.command_history.clone();
@@ -198,6 +194,31 @@ impl App {
                     }
                     AppMode::Bookmark => {
                         self.content_to_read = self.config.bookmark.clone();
+                        self.app_ui.content_render_from = 0;
+                        self.app_ui.content_cursor = 0;
+                    }
+                    AppMode::OpenCommandOption(meta)=>{
+                        self.run_options = vec![];
+
+                        // cari sesuai filetype
+                        for typeoption in &self.config.run_options {
+                            if typeoption.filetype_name == meta.file_type {
+                                for run_option in &typeoption.commands {
+                                    self.run_options.push(run_option.clone());
+                                }
+                                break;
+                            }
+                        }
+                        for typeoption in &self.config.run_options {
+                            if typeoption.filetype_name == ".".to_string() {
+                                for run_option in &typeoption.commands {
+                                    self.run_options.push(run_option.clone());
+                                }
+                                break;
+                            }
+                        }
+                        self.content_to_read = self.run_options.iter().map(|r| format!("{} \x1b[2m$ {}",&r.name, &r.run)).collect();
+
                         self.app_ui.content_render_from = 0;
                         self.app_ui.content_cursor = 0;
                     }
@@ -218,6 +239,18 @@ impl App {
 
         Ok(())
     }
+
+
+    // fn ask_quesion(&mut self, message: &str) -> io::Result<String>{
+    //     self.app_ui.set_alternate_screen(false)?;
+    //     print!("[Question!] {}", message);
+    //     self.app_ui.stdout.flush()?;
+    //     let mut answer = String::new();
+    //     io::stdin().read_line(&mut answer)?;
+    //     self.app_ui.set_alternate_screen(true)?;
+
+    //     Ok(answer.clone())
+    // }
 
     fn find_sugest(&mut self) -> io::Result<()> {
         if (self.x_cursor as usize) < self.command.len() || self.command.is_empty() {
@@ -307,6 +340,21 @@ impl App {
                 "\x1b[1m\x1b[035m{}\x1b[0m exit \x1b[1m\x1b[035m{}\x1b[0m back",
                 "^c", "Esc",
             );
+        } else if let AppMode::OpenCommandOption(meta) = &self.app_mode {
+            if meta.display_name.contains(".") {
+                let mut filename = meta.display_name.split(".").map(|f| f).collect::<Vec<_>>();
+                let ext = filename.pop().unwrap();
+                self.decs_label = format!(
+                    "Run options for {}.\x1b[035m{}\x1b[0m",
+                    filename.join("."),
+                    ext
+                )
+            } else {
+                 self.decs_label = format!(
+                    "Run options for \x1b[035m{}\x1b[0m",
+                    &meta.display_name
+                )
+            }
         }
 
         if self.is_ignore_exec {
@@ -336,10 +384,23 @@ impl App {
         command_label = self
             .app_ui
             .trim_str_to(
-                &command_label.as_str(),
+                &command_label
+                    .as_str(),
                 self.app_ui.window_size.0.saturating_sub(3) as usize,
             )
             .to_string();
+            
+        command_label = command_label
+            .split_whitespace()
+            .map(|kata| {
+                if kata.starts_with("-") {
+                    format!("\x1b[2m{}\x1b[0m", kata)
+                } else {
+                    kata.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
 
         if self.is_ignore_exec {
             self.app_ui.print(&format!("\x1b[2m"))?;
@@ -423,6 +484,14 @@ impl App {
                         'f' => self.app_mode = AppMode::Normal,
                         't' => self.app_mode = AppMode::TerminalOnly,
                         'b' => self.app_mode = AppMode::Bookmark,
+                        'd' => {
+                            let path = self.current_path.to_string_lossy().into_owned();
+                            if !self.config.bookmark.contains(&path) {
+                                self.config.bookmark.insert(0, path.clone());
+                            }
+
+                            self.push_notif( &format!("\x1b[1m\x1b[035m{}\x1b[0m has added to bookmark", &path).as_str())?;   
+                        }
                         _ => {}
                     }
                     self.re_read = true;
@@ -526,17 +595,27 @@ impl App {
     
 
             KeyCode::Enter => {
-                if self.app_mode == AppMode::Bookmark {
-                    if self.content_to_read.len() != 0 {
-                        let selected = &self.content_to_read[self.app_ui.content_cursor];
-                        self.command = format!("cd {}", selected.clone());
-                        self.app_mode = AppMode::Normal;
+                match &self.app_mode {
+                    AppMode::Bookmark => {
+                        if self.content_to_read.len() != 0 {
+                            let selected = &self.content_to_read[self.app_ui.content_cursor];
+                            self.command = format!("cd {}", selected.clone());
+                            self.app_mode = AppMode::Normal;
+                        }
                     }
-                } else if self.app_mode == AppMode::CommandHistory {
-                    let selected = &self.content_to_read[self.app_ui.content_cursor];
+                    AppMode::CommandHistory => {
+                        let selected = &self.content_to_read[self.app_ui.content_cursor];
                         self.command = selected.clone();
                         self.app_mode = AppMode::Normal;
+                    }
+                    AppMode::OpenCommandOption(meta) => {
+                        let selected = &self.run_options[self.app_ui.content_cursor];
+                        self.command = self.app_term.convert_run_option(meta, selected.run.clone());
+                        self.app_mode = AppMode::Normal;
+                    }
+                    _ =>{}
                 }
+
                 if self.is_ignore_exec {
                     self.open_dir()?;
                 } else {
@@ -661,6 +740,17 @@ impl App {
             self.current_path.display(),
             // self.temp_path.display()
         );
+
+        // println!("{:?}", self.config.run_options);
+
+        let path_to_temp_folder =
+        pathmanager::convert_path_to_nav("~/.config/luru/.temp/")?;
+        let folder_temp =
+        pathmanager::resolve_path(&PathBuf::from("/"), &path_to_temp_folder)?;
+
+        if folder_temp.exists() {
+            self.app_term.run(format!("rm -r \"{}\"", folder_temp.display()))?;
+        }
         Ok(())
     }
 }
