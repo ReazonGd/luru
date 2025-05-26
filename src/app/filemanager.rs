@@ -62,15 +62,24 @@ pub fn make_empty_file(path: PathBuf) {
     fs::write(path, "").unwrap();
 }
 
+#[derive(PartialEq)]
 pub struct MetadataInfo {
     pub display_name: String,
     pub size: u64,
     pub modified: String,
+    pub file_type: String,
+    pub path: PathBuf,
 }
 pub fn metadata(path: &PathBuf) -> io::Result<MetadataInfo> {
     let metadata = fs::metadata(path)?;
     let display_name = path.file_name().unwrap().to_str().unwrap().to_string();
     let size = metadata.len();
+    let mut extension = String::from("");
+
+    if let Some(filename) = path.extension() {
+        extension = String::from(filename.to_str().unwrap()).to_lowercase();
+    }
+
     let modified = metadata
         .modified()
         .map(|time| {
@@ -81,7 +90,9 @@ pub fn metadata(path: &PathBuf) -> io::Result<MetadataInfo> {
         .unwrap_or(0);
 
     Ok(MetadataInfo {
+        file_type: extension.clone(),
         display_name,
+        path: path.clone(),
         size,
         modified: format!("{:?}", modified),
     })

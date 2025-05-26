@@ -8,6 +8,8 @@ edition = "2021"
 crossterm = "0.28.1"
 chrono = "0.4"
 ctrlc = "3.4" 
+rand = "0.9.1"
+base64 = "0.22.1"
 
 [[bin]]
 name = "luru"
